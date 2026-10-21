@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: goldtrend
+      POSTGRES_PASSWORD: goldtrend
+      POSTGRES_DB: goldtrend
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goldtrend"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: goldtrend
+      PGPASSWORD: goldtrend
+      PGDATABASE: goldtrend
+      LOG_DIR: /data/mt5-logs
+      POLL_INTERVAL_MS: "60000"
+    volumes:
+      # Bind-mounts the MT5 terminal's Files folder (where the EAs write their
+      # *_log.csv) straight from the Windows host so new rows get picked up
+      # automatically. Update MT5_LOGS_PATH in .env if the terminal ID changes.
+      - ${MT5_LOGS_PATH:-../MQL5-logs-placeholder}:/data/mt5-logs:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "8080:80"
+
+volumes:
+  db-data:
